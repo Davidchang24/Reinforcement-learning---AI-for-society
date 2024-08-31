@@ -62,22 +62,29 @@ def play_game(model, num_rollouts, num_threads, verbose):
         nps = N / elapsed
         same_paths = root.same_paths
 
+        # Print MCTS statistics after rollouts
         if verbose:
+            print(f"\nMCTS Statistics after {num_rollouts} rollouts:")
             print(root.getStatisticsString())
-            print(f'total rollouts {int(N)} Q {Q:0.3f} duplicate paths {same_paths} elapsed {elapsed:0.2f} nps {nps:0.2f}')
+            print(f'Total rollouts: {int(N)} | Q-value: {Q:.3f} | Duplicate paths: {same_paths} | '
+                  f'Elapsed time: {elapsed:.2f} s | Nodes per second (nps): {nps:.2f}')
 
+        # Select the move with the highest visit count
         edge = root.maxNSelect()
         bestmove = edge.getMove()
 
+        # Print the selected move
+        if verbose:
+            print(f"Selected move: {bestmove} | FEN: {board.fen()}")
+
+        # Store game data and make the move
         game_data.append((board.fen(), bestmove))
         moves.append(bestmove)
         board.push(bestmove)
 
-        if verbose:
-            print(f'Move: {bestmove}')
-
     result = board.result()
 
+    # Convert moves to PGN format
     game = chess.pgn.Game()
     node = game.add_variation(moves[0])
     for move in moves[1:]:
@@ -86,7 +93,7 @@ def play_game(model, num_rollouts, num_threads, verbose):
     game.headers["Result"] = result
     pgn = str(game)
 
-    print(f"Game PGN:\n{pgn}")
+    print(f"\nFinal Game PGN:\n{pgn}")
 
     return game_data, result
 
@@ -175,14 +182,16 @@ def main(modelFile, num_rollouts, num_threads, num_epochs, num_games, num_cycles
     if cuda:
         alphaZeroNet.cuda()
 
+    # If modelFile is provided, load it; otherwise, start with a fresh model
     if modelFile:
         if cuda:
             weights = torch.load(modelFile)
         else:
             weights = torch.load(modelFile, map_location=torch.device('cpu'))
         alphaZeroNet.load_state_dict(weights)
+        print("Loaded model from file:", modelFile)
     else:
-        raise ValueError("The initial model file path must be provided")
+        print("No model file provided; starting from scratch.")
 
     alphaZeroNet.eval()
 
@@ -227,17 +236,19 @@ def main(modelFile, num_rollouts, num_threads, num_epochs, num_games, num_cycles
 
     plot_losses(all_losses, save_dir)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage='Self-play and train the model.')
-    parser.add_argument('--model', help='Path to model (.pt) file.', default='AlphaZeroNet_20x256.pt', required=True)
-    parser.add_argument('--rollouts', type=int, help='The number of rollouts on computers turn', default=10)
+    parser.add_argument('--model', help='Path to model (.pt) file.', default=None)
+    parser.add_argument('--rollouts', type=int, help='The number of rollouts on computers turn', default=20)
     parser.add_argument('--threads', type=int, help='Number of threads used per rollout', default=10)
     parser.add_argument('--epochs', type=int, help='Number of epochs to train on each game', default=10)
     parser.add_argument('--games', type=int, help='Number of self-play games to generate', default=10)
     parser.add_argument('--cycles', type=int, help='Number of self-play and training cycles', default=3)
     parser.add_argument('--save_dir', help='Directory to save games and models', default='selfplay_data')
-    parser.add_argument('--verbose', help='Print search statistics', action='store_true')
+    parser.add_argument('--verbose', help='Print search statistics', action='store_true', default=True)  # Set default to True
     args = parser.parse_args()
 
     os.makedirs(args.save_dir, exist_ok=True)
     main(args.model, args.rollouts, args.threads, args.epochs, args.games, args.cycles, args.save_dir, args.verbose)
+
